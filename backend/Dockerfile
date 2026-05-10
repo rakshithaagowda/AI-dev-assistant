@@ -1,15 +1,18 @@
 FROM python:3.12-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
 WORKDIR /app
 
-COPY requirements.txt ./
+# Install dependencies
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY frontend ./frontend
+# Copy backend source
+COPY backend/ ./backend/
+
+# Copy frontend
+COPY frontend/ ./frontend/
+
+WORKDIR /app/backend
 
 EXPOSE 8000
 

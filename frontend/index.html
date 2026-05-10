@@ -1,102 +1,215 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QyverixAI | Code Intelligence Workspace</title>
-    <link rel="stylesheet" href="style.css?v=20260422b">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <link rel="icon" type="image/x-icon" href="public/favicon.ico">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QyverixAI — AI Developer Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="ambient ambient-1"></div>
-    <div class="ambient ambient-2"></div>
-    <div class="ambient-lines"></div>
-
-    <div class="workspace-shell">
-        <header class="workspace-topbar">
-            <div class="logo-block">
-                <p class="kicker">Code Intelligence Workspace</p>
-                <h1>QyverixAI</h1>
-            </div>
-            <div class="topbar-controls">
-                <div class="api-wrap">
-                    <label for="api-base">API</label>
-                    <input id="api-base" type="text" placeholder="http://localhost:8000" autocomplete="off">
-                </div>
-                <button id="theme-toggle" type="button" class="ghost-btn">Dark</button>
-            </div>
-        </header>
-
-        <main class="workspace-main">
-            <aside class="control-panel">
-                <section class="panel-card">
-                    <h2>Mission Control</h2>
-                    <p>Choose a mode, paste code, and ship cleaner output faster.</p>
-                    <div class="chip-grid">
-                        <button type="button" class="prompt-chip" data-prompt="Explain this code line by line, then summarize the algorithm and complexity.">Deep Explain</button>
-                        <button type="button" class="prompt-chip" data-prompt="Find bugs, security issues, and edge cases. Return a corrected version.">Fix and Secure</button>
-                        <button type="button" class="prompt-chip" data-prompt="Optimize this implementation for performance and readability with before vs after analysis.">Performance Pass</button>
-                        <button type="button" class="prompt-chip" data-prompt="Write robust unit tests covering happy path, edge cases, and failure cases.">Build Tests</button>
-                    </div>
-                </section>
-
-                <section class="panel-card">
-                    <h3>Starter Snippets</h3>
-                    <div class="sample-grid">
-                        <button type="button" class="sample-chip" data-sample="python-function">Python Function</button>
-                        <button type="button" class="sample-chip" data-sample="javascript-async">JS Async</button>
-                        <button type="button" class="sample-chip" data-sample="sql-query">SQL Query</button>
-                    </div>
-                </section>
-
-                <section class="panel-card panel-tip">
-                    <h3>Shortcut</h3>
-                    <p>Press Ctrl/Cmd + Enter in either input to send instantly.</p>
-                </section>
-            </aside>
-
-            <section class="conversation-stage">
-                <div class="stage-head">
-                    <h2>Conversation</h2>
-                    <button type="button" id="clear-chat" class="clear-btn">Clear</button>
-                </div>
-
-                <div id="chat-thread" class="chat-thread" aria-live="polite">
-                    <article class="message assistant">
-                        <div class="message-header">
-                            <span>QyverixAI</span>
-                        </div>
-                        <div class="message-body">
-                            <p>Welcome to your code intelligence workspace. Paste code, ask for fixes, optimizations, tests, or architecture decisions.</p>
-                        </div>
-                    </article>
-                </div>
-
-                <form id="chat-form" class="composer-shell">
-                    <div class="composer-grid">
-                        <div class="input-stack">
-                            <label for="code-input">Code Context</label>
-                            <textarea id="code-input" rows="8" placeholder="Paste code here (optional)"></textarea>
-                        </div>
-                        <div class="input-stack">
-                            <label for="message-input">Your Prompt</label>
-                            <textarea id="message-input" rows="8" placeholder="Ask for explanation, fix, optimization, tests, refactor..."></textarea>
-                        </div>
-                    </div>
-
-                    <div class="composer-footer">
-                        <span id="status" class="status">Ready</span>
-                        <div class="footer-actions">
-                            <button id="send-btn" type="submit" class="send-btn">Send Message</button>
-                        </div>
-                    </div>
-                </form>
-            </section>
-        </main>
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-left">
+      <span class="logo-mark">⬡</span>
+      <span class="logo-text">QyverixAI</span>
+      <span class="badge">v2.0</span>
     </div>
+    <div class="nav-right">
+      <a href="https://github.com/imDarshanGK/AI-dev-assistant" target="_blank" class="nav-link">GitHub</a>
+      <a href="#docs" class="nav-link">Docs</a>
+      <button class="btn-outline" id="themeToggle">◐ Theme</button>
+    </div>
+  </nav>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="script.js?v=20260422b"></script>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-grid-bg"></div>
+    <div class="hero-content">
+      <div class="hero-chip">
+        <span class="chip-dot"></span>
+        Open Source · GSSoC 2026 Project
+      </div>
+      <h1 class="hero-title">
+        Debug. Understand.<br />
+        <em>Ship faster.</em>
+      </h1>
+      <p class="hero-sub">
+        AI-powered code analysis for beginners. Paste your code - get plain-English explanations, bug reports, and improvement suggestions instantly.
+      </p>
+      <div class="hero-cta">
+        <button class="btn-primary" onclick="scrollToApp()">Try it free →</button>
+        <a href="https://github.com/imDarshanGK/AI-dev-assistant" class="btn-ghost" target="_blank">⭐ Star on GitHub</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-val">3</span><span class="stat-label">APIs</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat"><span class="stat-val">MIT</span><span class="stat-label">License</span></div>
+        <div class="stat-divider"></div>
+        <div class="stat"><span class="stat-val">FastAPI</span><span class="stat-label">Backend</span></div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="code-preview">
+        <div class="code-header">
+          <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+          <span class="code-file">main.py</span>
+        </div>
+        <pre class="code-body"><span class="kw">def</span> <span class="fn">calculate</span>(a, b):
+    result = a <span class="op">/</span> b
+    <span class="kw">return</span> result
+
+<span class="cm"># Called with b=0</span>
+calculate(<span class="num">10</span>, <span class="num">0</span>)</pre>
+        <div class="analysis-chip error">⚠ ZeroDivisionError detected</div>
+        <div class="analysis-chip fix">✦ Add: if b == 0: return None</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <div class="section-label">What it does</div>
+    <div class="features-grid">
+      <div class="feature-card accent-blue">
+        <div class="feature-icon">⬡</div>
+        <h3>Explain Code</h3>
+        <p>Get plain English breakdowns of any function, class, or snippet — no jargon.</p>
+        <span class="feature-endpoint">POST /explanation/</span>
+      </div>
+      <div class="feature-card accent-red">
+        <div class="feature-icon">◎</div>
+        <h3>Debug Errors</h3>
+        <p>Paste broken code and receive structured bug reports with exact fix suggestions.</p>
+        <span class="feature-endpoint">POST /debugging/</span>
+      </div>
+      <div class="feature-card accent-green">
+        <div class="feature-icon">◈</div>
+        <h3>Improve Quality</h3>
+        <p>Get actionable refactoring suggestions, style fixes, and best-practice tips.</p>
+        <span class="feature-endpoint">POST /suggestions/</span>
+      </div>
+      <div class="feature-card accent-purple">
+        <div class="feature-icon">◇</div>
+        <h3>Full Analysis</h3>
+        <p>One endpoint. All three analyses combined — explanation, debug, and improvement.</p>
+        <span class="feature-endpoint">POST /analyze/</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN APP -->
+  <section class="app-section" id="app">
+    <div class="section-label">Workspace</div>
+    <div class="app-container">
+      <!-- Left: Editor -->
+      <div class="editor-panel">
+        <div class="panel-header">
+          <span class="panel-title">Code Editor</span>
+          <div class="panel-actions">
+            <select id="langSelect" class="lang-select">
+              <option value="python">Python</option>
+              <option value="javascript">JavaScript</option>
+              <option value="java">Java</option>
+              <option value="typescript">TypeScript</option>
+              <option value="cpp">C++</option>
+            </select>
+            <button class="icon-btn" id="uploadBtn" title="Upload file">↑</button>
+            <button class="icon-btn" id="clearBtn" title="Clear">✕</button>
+          </div>
+        </div>
+        <textarea id="codeInput" class="code-editor" spellcheck="false" placeholder="# Paste your code here...
+
+def greet(name):
+    print('Hello, ' + name)
+
+greet('World')"></textarea>
+        <div class="editor-footer">
+          <span id="lineCount" class="line-count">0 lines</span>
+          <span class="shortcut">Ctrl+Enter to analyze</span>
+        </div>
+        <input type="file" id="fileInput" accept=".py,.js,.java,.ts,.cpp,.c" style="display:none" />
+      </div>
+
+      <!-- Right: Controls + Output -->
+      <div class="output-panel">
+        <div class="panel-header">
+          <span class="panel-title">Analysis</span>
+          <div class="panel-actions">
+            <button class="icon-btn" id="copyBtn" title="Copy result">⎘</button>
+            <button class="icon-btn" id="downloadBtn" title="Download">↓</button>
+            <button class="icon-btn" id="saveBtn" title="Save to favorites">♡</button>
+          </div>
+        </div>
+
+        <!-- Mode Tabs -->
+        <div class="mode-tabs">
+          <button class="tab active" data-mode="analyze">⬡ Full Analysis</button>
+          <button class="tab" data-mode="explanation">⬡ Explain</button>
+          <button class="tab" data-mode="debugging">◎ Debug</button>
+          <button class="tab" data-mode="suggestions">◈ Improve</button>
+        </div>
+
+        <!-- API URL -->
+        <div class="api-url-row">
+          <span class="api-label">API</span>
+          <input type="text" id="apiUrl" value="http://localhost:8000" class="api-input" />
+          <div id="statusDot" class="status-dot offline" title="Connection status"></div>
+        </div>
+
+        <!-- Run Button -->
+        <button class="btn-run" id="runBtn">
+          <span id="runLabel">▶ Analyze Code</span>
+        </button>
+
+        <!-- Output -->
+        <div class="output-box" id="outputBox">
+          <div class="output-placeholder">
+            <div class="placeholder-icon">◇</div>
+            <p>Your analysis will appear here.</p>
+            <p class="placeholder-sub">Paste code → select mode → click Analyze.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY PANEL -->
+  <section class="history-section">
+    <div class="section-label">Query History</div>
+    <div class="history-container" id="historyContainer">
+      <p class="history-empty">No history yet. Run your first analysis above.</p>
+    </div>
+    <div class="history-actions">
+      <button class="btn-ghost-sm" id="clearHistoryBtn">Clear History</button>
+    </div>
+  </section>
+
+  <!-- FAVORITES PANEL -->
+  <section class="fav-section">
+    <div class="section-label">Saved Favorites</div>
+    <div class="fav-container" id="favContainer">
+      <p class="history-empty">No favorites saved yet.</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-left">
+      <span class="logo-mark">⬡</span>
+      <span>QyverixAI</span>
+      <span class="footer-sep">·</span>
+      <span>MIT License</span>
+      <span class="footer-sep">·</span>
+      <span>GSSoC 2026</span>
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/imDarshanGK/AI-dev-assistant" target="_blank">GitHub</a>
+      <a href="http://localhost:8000/docs" target="_blank">API Docs</a>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
 </body>
 </html>

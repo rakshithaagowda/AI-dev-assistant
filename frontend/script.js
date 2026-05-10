@@ -1,356 +1,371 @@
-const chatForm = document.getElementById('chat-form');
-const chatThread = document.getElementById('chat-thread');
-const messageInput = document.getElementById('message-input');
-const codeInput = document.getElementById('code-input');
-const sendBtn = document.getElementById('send-btn');
-const statusBox = document.getElementById('status');
-const apiBaseInput = document.getElementById('api-base');
-const themeToggle = document.getElementById('theme-toggle');
-const clearChatBtn = document.getElementById('clear-chat');
+// ── State ──
+let currentMode = 'analyze';
+let history = JSON.parse(localStorage.getItem('qyverix_history') || '[]');
+let favorites = JSON.parse(localStorage.getItem('qyverix_favorites') || '[]');
+let lastResult = '';
 
-const API_BASE_KEY = 'ai-assistant-api-base';
-const THEME_KEY = 'ai-assistant-theme';
-const LEGACY_RENDER_API_BASE = 'https://qyverixai.onrender.com';
-const DEFAULT_API_BASE = window.location.origin && window.location.origin !== 'null'
-    ? window.location.origin
-    : LEGACY_RENDER_API_BASE;
+// ── DOM refs ──
+const codeInput = document.getElementById('codeInput');
+const runBtn = document.getElementById('runBtn');
+const runLabel = document.getElementById('runLabel');
+const outputBox = document.getElementById('outputBox');
+const apiUrlInput = document.getElementById('apiUrl');
+const statusDot = document.getElementById('statusDot');
+const lineCount = document.getElementById('lineCount');
+const fileInput = document.getElementById('fileInput');
+const historyContainer = document.getElementById('historyContainer');
+const favContainer = document.getElementById('favContainer');
+const themeToggle = document.getElementById('themeToggle');
 
-let history = [];
-let pendingMessageNode = null;
-let requestInFlight = false;
-const REQUEST_TIMEOUT_MS = 25000;
-
-const CODE_SAMPLES = {
-    'python-function': `def calculate_discount(price, percent):\n    if percent < 0 or percent > 100:\n        raise ValueError("percent must be between 0 and 100")\n    return round(price * (1 - percent / 100), 2)\n\nprint(calculate_discount(199.99, 15))`,
-    'javascript-async': `async function fetchUserProfile(userId) {\n  const response = await fetch(\`/api/users/\${userId}\`);\n  if (!response.ok) {\n    throw new Error('Failed to load user profile');\n  }\n  return response.json();\n}\n\nfetchUserProfile(42).then(console.log).catch(console.error);`,
-    'sql-query': `SELECT\n    customer_id,\n    COUNT(*) AS total_orders,\n    ROUND(AVG(order_total), 2) AS avg_order_value\nFROM orders\nWHERE created_at >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY customer_id\nORDER BY total_orders DESC\nLIMIT 10;`,
-};
-
-function setStatus(message, isError = false) {
-    statusBox.textContent = message;
-    statusBox.classList.toggle('error', isError);
-}
-
-function setLoading(isLoading) {
-    sendBtn.disabled = isLoading;
-    sendBtn.textContent = isLoading ? 'Thinking...' : 'Send Message';
-}
-
-function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    themeToggle.textContent = theme === 'dark' ? 'Light' : 'Dark';
-    window.localStorage.setItem(THEME_KEY, theme);
-}
-
-function initApiBase() {
-    const saved = window.localStorage.getItem(API_BASE_KEY);
-    const currentOrigin = window.location.origin && window.location.origin !== 'null' ? window.location.origin : '';
-
-    if (saved) {
-        if (saved === LEGACY_RENDER_API_BASE && currentOrigin) {
-            apiBaseInput.value = currentOrigin;
-            window.localStorage.setItem(API_BASE_KEY, currentOrigin);
-        } else {
-            apiBaseInput.value = saved;
-        }
-    } else {
-        apiBaseInput.value = DEFAULT_API_BASE;
-    }
-}
-
-function getApiBase() {
-    const raw = apiBaseInput.value.trim();
-    if (!raw) {
-        return DEFAULT_API_BASE;
-    }
-
-    const normalized = raw
-        .replace(/\/$/, '')
-        .replace(/\/app$/, '');
-
-    return normalized || DEFAULT_API_BASE;
-}
-
-function parseMessageBody(text) {
-    const content = String(text || '');
-    const nodes = [];
-    const codeFencePattern = /```([a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g;
-
-    let cursor = 0;
-    let match;
-
-    while ((match = codeFencePattern.exec(content)) !== null) {
-        const before = content.slice(cursor, match.index).trim();
-        if (before) {
-            before
-                .split(/\n{2,}/)
-                .map((part) => part.trim())
-                .filter(Boolean)
-                .forEach((paragraph) => {
-                    nodes.push({ type: 'paragraph', text: paragraph });
-                });
-        }
-
-        nodes.push({ type: 'code', language: (match[1] || '').toLowerCase(), text: match[2].trim() });
-        cursor = match.index + match[0].length;
-    }
-
-    const trailing = content.slice(cursor).trim();
-    if (trailing) {
-        trailing
-            .split(/\n{2,}/)
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .forEach((paragraph) => {
-                nodes.push({ type: 'paragraph', text: paragraph });
-            });
-    }
-
-    if (nodes.length === 0) {
-        nodes.push({ type: 'paragraph', text: content });
-    }
-
-    return nodes;
-}
-
-function appendMessage(role, text) {
-    const article = document.createElement('article');
-    article.className = `message ${role}`;
-
-    const header = document.createElement('div');
-    header.className = 'message-header';
-
-    const author = document.createElement('span');
-    author.textContent = role === 'user' ? 'You' : 'QyverixAI';
-    header.appendChild(author);
-
-    if (role === 'assistant') {
-        const copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'copy-btn';
-        copyBtn.textContent = 'Copy';
-        copyBtn.addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(text);
-                setStatus('Copied response.');
-            } catch (error) {
-                setStatus('Failed to copy response.', true);
-            }
-        });
-        header.appendChild(copyBtn);
-    }
-
-    article.appendChild(header);
-
-    const body = document.createElement('div');
-    body.className = 'message-body';
-
-    parseMessageBody(text).forEach((block) => {
-        if (block.type === 'code') {
-            const pre = document.createElement('pre');
-            const code = document.createElement('code');
-            code.textContent = block.text;
-            if (block.language) {
-                code.className = `language-${block.language}`;
-            }
-            pre.appendChild(code);
-            body.appendChild(pre);
-            if (window.hljs) {
-                window.hljs.highlightElement(code);
-            }
-            return;
-        }
-
-        const p = document.createElement('p');
-        p.textContent = block.text;
-        body.appendChild(p);
-    });
-
-    article.appendChild(body);
-    chatThread.appendChild(article);
-    chatThread.scrollTop = chatThread.scrollHeight;
-
-    return article;
-}
-
-function showThinkingMessage() {
-    pendingMessageNode = appendMessage('assistant', 'Thinking through your request...');
-    pendingMessageNode.classList.add('thinking');
-}
-
-function clearThinkingMessage() {
-    if (pendingMessageNode && pendingMessageNode.parentNode) {
-        pendingMessageNode.parentNode.removeChild(pendingMessageNode);
-    }
-    pendingMessageNode = null;
-}
-
-async function updateQuickPrompt(promptText, autoSend = false) {
-    messageInput.value = promptText;
-    messageInput.focus();
-    if (autoSend) {
-        if (!codeInput.value.trim()) {
-            setStatus('Paste code first, then tap the action again.', true);
-            return;
-        }
-        await sendMessage();
-        return;
-    }
-    setStatus('Prompt inserted.');
-}
-
-function resetChat() {
-    const initialMessage = `
-        <article class="message assistant">
-            <div class="message-header">
-                <span>QyverixAI</span>
-            </div>
-            <div class="message-body">
-                <p>Welcome to your code intelligence workspace. Paste code, ask for fixes, optimizations, tests, or architecture decisions.</p>
-            </div>
-        </article>
-    `;
-    chatThread.innerHTML = initialMessage;
-    history = [];
-    setStatus('Conversation cleared.');
-}
-
-async function sendMessage() {
-    if (requestInFlight) {
-        setStatus('Please wait for the current response.', true);
-        return;
-    }
-
-    const message = messageInput.value.trim();
-    const code = codeInput.value.trim();
-
-    if (!message) {
-        setStatus('Enter a message first.', true);
-        return;
-    }
-
-    appendMessage('user', code ? `${message}\n\nCode:\n\n\`\`\`\n${code}\n\`\`\`` : message);
-    messageInput.value = '';
-    setStatus('Sending...');
-    requestInFlight = true;
-    setLoading(true);
-    showThinkingMessage();
-    let timeoutId = null;
-
-    try {
-        const apiBase = getApiBase();
-        window.localStorage.setItem(API_BASE_KEY, apiBase);
-
-        const abortController = new AbortController();
-        timeoutId = window.setTimeout(() => abortController.abort(), REQUEST_TIMEOUT_MS);
-
-        const response = await fetch(`${apiBase}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message,
-                code: code || null,
-                history: history.slice(-12),
-            }),
-            signal: abortController.signal,
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            clearThinkingMessage();
-            const errorText = data.detail || data.error || 'Request failed.';
-            appendMessage('assistant', `Request failed: ${errorText}`);
-            setStatus('Request failed.', true);
-            return;
-        }
-
-        clearThinkingMessage();
-        const assistantText = String(data.response || '').trim() || 'No response returned.';
-        appendMessage('assistant', assistantText);
-        history.push(`User: ${message}`);
-        history.push(`Assistant: ${assistantText}`);
-        setStatus('Ready');
-    } catch (error) {
-        clearThinkingMessage();
-        if (error instanceof DOMException && error.name === 'AbortError') {
-            appendMessage('assistant', 'Request timed out. Please retry or verify API endpoint.');
-            setStatus('Request timed out.', true);
-        } else {
-            appendMessage('assistant', 'Cannot connect to backend. Check API URL and server status.');
-            setStatus('Connection error.', true);
-        }
-    } finally {
-        if (timeoutId !== null) {
-            window.clearTimeout(timeoutId);
-        }
-        requestInFlight = false;
-        setLoading(false);
-    }
-}
-
-chatForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    await sendMessage();
-});
-
-messageInput.addEventListener('keydown', async (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        await sendMessage();
-    }
-});
-
-codeInput.addEventListener('keydown', async (event) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        await sendMessage();
-    }
-});
-
-codeInput.addEventListener('input', () => {
-    if (codeInput.value.length > 0) {
-        setStatus('Code context ready.');
-    }
-});
-
+// ── Theme ──
+const savedTheme = localStorage.getItem('qyverix_theme') || 'dark';
+if (savedTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
 themeToggle.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme') || 'light';
-    applyTheme(current === 'light' ? 'dark' : 'light');
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  localStorage.setItem('qyverix_theme', isLight ? 'dark' : 'light');
 });
 
-apiBaseInput.addEventListener('change', () => {
-    window.localStorage.setItem(API_BASE_KEY, getApiBase());
-    setStatus('API endpoint updated.');
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentMode = tab.dataset.mode;
+  });
 });
 
-const savedTheme = window.localStorage.getItem(THEME_KEY);
-applyTheme(savedTheme === 'dark' ? 'dark' : 'light');
-initApiBase();
-setStatus('Ready');
-
-document.querySelectorAll('.prompt-chip').forEach((btn) => {
-    btn.addEventListener('click', async (event) => {
-        event.preventDefault();
-        await updateQuickPrompt(String(btn.dataset.prompt || '').trim(), true);
-    });
+// ── Line count ──
+codeInput.addEventListener('input', () => {
+  const lines = codeInput.value.split('\n').length;
+  lineCount.textContent = `${lines} line${lines !== 1 ? 's' : ''}`;
 });
 
-document.querySelectorAll('.sample-chip').forEach((btn) => {
-    btn.addEventListener('click', (event) => {
-        event.preventDefault();
-        const sampleKey = String(btn.dataset.sample || '').trim();
-        const snippet = CODE_SAMPLES[sampleKey];
-        if (!snippet) {
-            return;
-        }
-        codeInput.value = snippet;
-        codeInput.focus();
-        setStatus('Sample code loaded.');
-    });
+// ── Keyboard shortcut ──
+codeInput.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runAnalysis();
+  }
 });
 
-if (clearChatBtn) {
-    clearChatBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        resetChat();
-    });
+// ── File upload ──
+document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    codeInput.value = ev.target.result;
+    codeInput.dispatchEvent(new Event('input'));
+  };
+  reader.readAsText(file);
+});
+
+// ── Clear ──
+document.getElementById('clearBtn').addEventListener('click', () => {
+  codeInput.value = '';
+  lineCount.textContent = '0 lines';
+  resetOutput();
+});
+
+// ── Copy ──
+document.getElementById('copyBtn').addEventListener('click', () => {
+  if (!lastResult) return;
+  navigator.clipboard.writeText(lastResult);
+  showToast('Copied to clipboard');
+});
+
+// ── Download ──
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!lastResult) return;
+  const blob = new Blob([lastResult], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `qyverix-analysis-${Date.now()}.txt`;
+  a.click();
+});
+
+// ── Save favorite ──
+document.getElementById('saveBtn').addEventListener('click', () => {
+  if (!lastResult) return;
+  const entry = {
+    id: Date.now(),
+    code: codeInput.value.slice(0, 100),
+    result: lastResult,
+    mode: currentMode,
+    time: new Date().toLocaleString()
+  };
+  favorites.unshift(entry);
+  if (favorites.length > 20) favorites = favorites.slice(0, 20);
+  localStorage.setItem('qyverix_favorites', JSON.stringify(favorites));
+  renderFavorites();
+  showToast('Saved to favorites ♡');
+});
+
+// ── Clear history ──
+document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+  history = [];
+  localStorage.setItem('qyverix_history', JSON.stringify(history));
+  renderHistory();
+});
+
+// ── Run Button ──
+runBtn.addEventListener('click', runAnalysis);
+
+function scrollToApp() {
+  document.getElementById('app').scrollIntoView({ behavior: 'smooth' });
 }
+window.scrollToApp = scrollToApp;
+
+// ── Connection check ──
+async function checkConnection() {
+  statusDot.className = 'status-dot checking';
+  try {
+    const resp = await fetch(`${getApiUrl()}/health`, { signal: AbortSignal.timeout(3000) });
+    statusDot.className = resp.ok ? 'status-dot online' : 'status-dot offline';
+  } catch {
+    statusDot.className = 'status-dot offline';
+  }
+}
+
+function getApiUrl() {
+  return apiUrlInput.value.replace(/\/$/, '');
+}
+
+apiUrlInput.addEventListener('change', checkConnection);
+checkConnection();
+
+// ── Main Analysis ──
+async function runAnalysis() {
+  const code = codeInput.value.trim();
+  if (!code) {
+    showError('Please paste some code first.');
+    return;
+  }
+
+  runBtn.disabled = true;
+  runBtn.classList.add('loading');
+  runLabel.textContent = '⟳ Analyzing...';
+  showLoading();
+
+  const url = `${getApiUrl()}/${currentMode === 'analyze' ? 'analyze' : currentMode}/`;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    renderResult(data, currentMode);
+    saveHistory(code, currentMode, data);
+    statusDot.className = 'status-dot online';
+  } catch (err) {
+    showError(err.message || 'Could not reach the backend. Make sure it is running.');
+    statusDot.className = 'status-dot offline';
+  } finally {
+    runBtn.disabled = false;
+    runBtn.classList.remove('loading');
+    runLabel.textContent = '▶ Analyze Code';
+  }
+}
+
+// ── Render Output ──
+function renderResult(data, mode) {
+  let html = '';
+  let text = '';
+
+  if (mode === 'analyze') {
+    // Full analysis
+    if (data.explanation) {
+      const ex = data.explanation;
+      text += `=== EXPLANATION ===\n`;
+      html += `<div class="result-section">
+        <h4>Explanation</h4>
+        <div class="result-text">
+          <p><strong>Language:</strong> ${ex.language || 'Unknown'}</p>
+          <p style="margin-top:8px">${ex.summary || ''}</p>
+          ${(ex.key_points || []).map(p => `<p>• ${p}</p>`).join('')}
+        </div>
+      </div>`;
+      text += `Language: ${ex.language}\n${ex.summary}\n${(ex.key_points || []).join('\n')}\n\n`;
+    }
+    if (data.debugging) {
+      const dg = data.debugging;
+      text += `=== DEBUGGING ===\n`;
+      const issues = dg.issues || [];
+      html += `<div class="result-section">
+        <h4>Debugging</h4>
+        <div class="result-text">
+          ${issues.length === 0
+            ? '<span class="result-tag tag-ok">✓ No issues found</span>'
+            : issues.map(i => `<div style="margin-bottom:10px">
+                <span class="result-tag tag-error">${i.type || 'Issue'}</span>
+                <p style="margin-top:4px">${i.description || ''}</p>
+                ${i.suggestion ? `<p style="color:var(--accent-green);margin-top:4px">Fix: ${i.suggestion}</p>` : ''}
+              </div>`).join('')}
+        </div>
+      </div>`;
+      text += issues.map(i => `${i.type}: ${i.description}\nFix: ${i.suggestion}`).join('\n') + '\n\n';
+    }
+    if (data.suggestions) {
+      const sg = data.suggestions;
+      const cards = sg.suggestions || [];
+      text += `=== SUGGESTIONS ===\n`;
+      html += `<div class="result-section">
+        <h4>Improvements</h4>
+        <div class="result-text">
+          ${cards.map(c => `<div style="margin-bottom:10px">
+            <span class="result-tag tag-info">${c.category || 'Tip'}</span>
+            <p style="margin-top:4px">${c.description || ''}</p>
+          </div>`).join('')}
+        </div>
+      </div>`;
+      text += cards.map(c => `[${c.category}] ${c.description}`).join('\n');
+    }
+  } else if (mode === 'explanation') {
+    html += `<div class="result-section">
+      <h4>Language</h4>
+      <div class="result-text">${data.language || 'Auto-detected'}</div>
+    </div>
+    <div class="result-section">
+      <h4>Summary</h4>
+      <div class="result-text">${data.summary || ''}</div>
+    </div>
+    <div class="result-section">
+      <h4>Key Points</h4>
+      <div class="result-text">${(data.key_points || []).map(p => `<p>• ${p}</p>`).join('')}</div>
+    </div>`;
+    text = `Language: ${data.language}\n${data.summary}\n${(data.key_points || []).join('\n')}`;
+  } else if (mode === 'debugging') {
+    const issues = data.issues || [];
+    html += `<div class="result-section">
+      <h4>Issues Found (${issues.length})</h4>
+      <div class="result-text">
+        ${issues.length === 0
+          ? '<span class="result-tag tag-ok">✓ No issues detected. Code looks clean!</span>'
+          : issues.map(i => `<div style="margin-bottom:14px;padding:12px;background:var(--bg-2);border-radius:6px;border:1px solid var(--border)">
+              <span class="result-tag tag-error">${i.type || 'Issue'}</span>
+              ${i.line ? `<span class="result-tag tag-info">Line ${i.line}</span>` : ''}
+              <p style="margin-top:8px">${i.description || ''}</p>
+              ${i.suggestion ? `<p style="margin-top:6px;color:var(--accent-green)">→ ${i.suggestion}</p>` : ''}
+            </div>`).join('')}
+      </div>
+    </div>`;
+    text = issues.map(i => `[${i.type}] Line ${i.line}: ${i.description}\nFix: ${i.suggestion}`).join('\n');
+  } else if (mode === 'suggestions') {
+    const cards = data.suggestions || [];
+    html += `<div class="result-section">
+      <h4>Suggestions (${cards.length})</h4>
+      <div class="result-text">
+        ${cards.map(c => `<div style="margin-bottom:12px;padding:12px;background:var(--bg-2);border-radius:6px;border:1px solid var(--border)">
+          <span class="result-tag tag-info">${c.category || 'Tip'}</span>
+          <p style="margin-top:8px">${c.description || ''}</p>
+          ${c.example ? `<pre style="margin-top:8px;font-size:12px;color:var(--text-3)">${c.example}</pre>` : ''}
+        </div>`).join('')}
+      </div>
+    </div>`;
+    text = cards.map(c => `[${c.category}] ${c.description}`).join('\n');
+  }
+
+  lastResult = text;
+  outputBox.innerHTML = html || '<p style="color:var(--text-3)">No structured output returned.</p>';
+}
+
+function showLoading() {
+  outputBox.innerHTML = `<div class="output-placeholder">
+    <div class="placeholder-icon" style="animation:pulse 1s infinite">⬡</div>
+    <p>Analyzing your code...</p>
+  </div>`;
+}
+
+function resetOutput() {
+  lastResult = '';
+  outputBox.innerHTML = `<div class="output-placeholder">
+    <div class="placeholder-icon">◇</div>
+    <p>Your analysis will appear here.</p>
+    <p class="placeholder-sub">Paste code → select mode → click Analyze.</p>
+  </div>`;
+}
+
+function showError(msg) {
+  outputBox.innerHTML = `<div class="result-section">
+    <h4>Error</h4>
+    <div class="result-text">
+      <span class="result-tag tag-error">✕ ${msg}</span>
+      <p style="margin-top:12px;color:var(--text-2)">Check that the backend is running at: <code>${getApiUrl()}</code></p>
+    </div>
+  </div>`;
+}
+
+// ── History ──
+function saveHistory(code, mode, result) {
+  history.unshift({
+    id: Date.now(),
+    preview: code.slice(0, 60).replace(/\n/g, ' ') + (code.length > 60 ? '...' : ''),
+    mode,
+    time: new Date().toLocaleTimeString()
+  });
+  if (history.length > 50) history = history.slice(0, 50);
+  localStorage.setItem('qyverix_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  if (history.length === 0) {
+    historyContainer.innerHTML = '<p class="history-empty">No history yet. Run your first analysis above.</p>';
+    return;
+  }
+  historyContainer.innerHTML = history.slice(0, 10).map(h => `
+    <div class="history-item">
+      <div>
+        <div class="history-preview">${escHtml(h.preview)}</div>
+        <div class="history-meta">${h.mode} · ${h.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderFavorites() {
+  if (favorites.length === 0) {
+    favContainer.innerHTML = '<p class="history-empty">No favorites saved yet.</p>';
+    return;
+  }
+  favContainer.innerHTML = favorites.map(f => `
+    <div class="history-item">
+      <div>
+        <div class="history-preview">${escHtml(f.code)}...</div>
+        <div class="history-meta">${f.mode} · ${f.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `
+    position:fixed;bottom:24px;right:24px;z-index:9999;
+    padding:10px 18px;background:var(--text);color:var(--bg);
+    border-radius:8px;font-family:var(--font-mono);font-size:13px;
+    animation:fadeIn 0.2s ease;pointer-events:none;
+  `;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
+// ── Init ──
+renderHistory();
+renderFavorites();

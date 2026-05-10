@@ -1,53 +1,36 @@
-from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, RedirectResponse
+"""
+QyverixAI — AI Developer Assistant Backend
+FastAPI application entry point
+"""
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-
-from pathlib import Path
-
+import time
+import uuid
+import os
 import logging
 
-from app.middleware import (
-    rate_limit_middleware,
-    request_id_and_logging_middleware,
-    request_size_limit_middleware,
-)
-from app.config import settings
-from app.database import Base, engine
-from app import models  # noqa: F401 - imports models for table registration
-from app.services.cache import cache
-from app.services.error_tracking import init_error_tracking
-from app.routers import analyze, auth, chat, debugging, explanation, share, suggestions, user_data
+from app.routers import explanation, debugging, suggestions, analyze
 
+# ── Logging ──
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("ai_assistant.api")
-init_error_tracking()
+logger = logging.getLogger("qyverix")
 
-_CURRENT_FILE = Path(__file__).resolve()
-_FRONTEND_CANDIDATES = [
-    _CURRENT_FILE.parents[1] / "frontend",  # Docker image layout: /app/frontend
-    _CURRENT_FILE.parents[2] / "frontend",  # Local workspace layout
-]
-FRONTEND_DIR = next((path for path in _FRONTEND_CANDIDATES if (path / "index.html").exists()), _FRONTEND_CANDIDATES[0])
-FRONTEND_AVAILABLE = (FRONTEND_DIR / "index.html").exists()
-
+# ── App ──
 app = FastAPI(
-    title="QyverixAI API",
-    description="A beginner-friendly API to explain code, detect issues, and suggest improvements.",
-    version="1.0.0",
-    docs_url="/docs" if settings.enable_docs else None,
-    redoc_url="/redoc" if settings.enable_docs else None,
-    openapi_url="/openapi.json" if settings.enable_docs else None,
+    title="QyverixAI",
+    description="Open-source AI Developer Assistant - code explanation, debugging, and improvement suggestions.",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-Base.metadata.create_all(bind=engine)
-
+# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,96 +39,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.middleware("http")(rate_limit_middleware)
-app.middleware("http")(request_size_limit_middleware)
-app.middleware("http")(request_id_and_logging_middleware)
+# ── Request ID + Timing Middleware ──
+@app.middleware("http")
+async def request_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())[:8]
+    start = time.time()
+    response = await call_next(request)
+    duration = round((time.time() - start) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time"] = f"{duration}ms"
+    logger.info(f"[{request_id}] {request.method} {request.url.path} → {response.status_code} ({duration}ms)")
+    return response
 
-if FRONTEND_AVAILABLE:
-    app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    request_id = getattr(request.state, "request_id", None)
-    return JSONResponse(
-        status_code=422,
-        content={
-            "error": "validation_error",
-            "detail": jsonable_encoder(exc.errors()),
-            "request_id": request_id,
-        },
-    )
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    request_id = getattr(request.state, "request_id", None)
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": "http_error",
-            "detail": exc.detail,
-            "request_id": request_id,
-        },
-    )
-
-
+# ── Exception Handler ──
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception):
-    request_id = getattr(request.state, "request_id", None)
-    logger.exception("unhandled_exception request_id=%s", request_id)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "internal_server_error",
-            "detail": "Something went wrong while processing the request.",
-            "request_id": request_id,
-        },
+        content={"detail": "An internal server error occurred. Please try again."}
     )
 
-# Include routers
-app.include_router(explanation.router)
-app.include_router(debugging.router)
-app.include_router(suggestions.router)
-app.include_router(analyze.router)
-app.include_router(auth.router)
-app.include_router(user_data.router)
-app.include_router(share.router)
-app.include_router(chat.router)
+# ── Routers ──
+app.include_router(explanation.router, prefix="/explanation", tags=["Explanation"])
+app.include_router(debugging.router, prefix="/debugging", tags=["Debugging"])
+app.include_router(suggestions.router, prefix="/suggestions", tags=["Suggestions"])
+app.include_router(analyze.router, prefix="/analyze", tags=["Full Analysis"])
 
-# API v1 namespace while preserving existing routes for backward compatibility.
-app.include_router(explanation.router, prefix="/api/v1")
-app.include_router(debugging.router, prefix="/api/v1")
-app.include_router(suggestions.router, prefix="/api/v1")
-app.include_router(analyze.router, prefix="/api/v1")
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(user_data.router, prefix="/api/v1")
-app.include_router(share.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
+# ── Serve frontend if built ──
+FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
+if os.path.isdir(FRONTEND_PATH):
+    app.mount("/app", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
 
-@app.get("/ping", tags=["Test"])
-def ping():
-    """Sample test endpoint to check API status."""
-    return {"message": "pong"}
-
-
-@app.get("/health", tags=["Test"])
-def health():
-    """Health endpoint for uptime checks."""
-    return {"status": "ok", "cache_backend": cache.backend}
-    
-@app.get("/", tags=["Root"])
+# ── Root ──
+@app.get("/", include_in_schema=False)
 def root():
-    """Open the frontend app when available; otherwise return API status."""
-    if FRONTEND_AVAILABLE:
-        return RedirectResponse(url="/app/")
+    return RedirectResponse(url="/app/")
 
-    payload = {
-        "message": "QyverixAI API is running.",
+# ── Health ──
+@app.get("/health", tags=["System"])
+def health():
+    return {
         "status": "ok",
+        "version": "2.0.0",
+        "provider": os.getenv("AI_PROVIDER", "rule-based"),
+        "llm_enabled": os.getenv("LLM_ENABLED", "false").lower() == "true",
     }
 
-    if settings.public_root_info and settings.enable_docs:
-        payload["docs"] = "/docs"
-
-    return payload
+# ── Info ──
+@app.get("/info", tags=["System"])
+def info():
+    return {
+        "name": "QyverixAI",
+        "description": "Open-source AI Developer Assistant",
+        "endpoints": ["/explanation/", "/debugging/", "/suggestions/", "/analyze/"],
+        "docs": "/docs",
+        "github": "https://github.com/imDarshanGK/AI-dev-assistant"
+    }

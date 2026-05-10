@@ -1,101 +1,78 @@
+<div align="center">
 
-# QyverixAI
+<br/>
 
-<p align="center">
-  <img src="screenshots/demo.png" alt="QyverixAI Demo" width="500"/>
-</p>
+```
+  ⬡ QyverixAI
+```
 
-<p align="center">
-  <a href="https://github.com/imDarshanGK/AI-dev-assistant/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/imDarshanGK/AI-dev-assistant/ci.yml?branch=main" alt="CI"></a>
-  <a href="https://github.com/imDarshanGK/AI-dev-assistant/stargazers"><img src="https://img.shields.io/github/stars/imDarshanGK/AI-dev-assistant?style=social" alt="GitHub stars"></a>
-  <a href="https://github.com/imDarshanGK/AI-dev-assistant/network/members"><img src="https://img.shields.io/github/forks/imDarshanGK/AI-dev-assistant?style=social" alt="GitHub forks"></a>
-  <a href="https://github.com/imDarshanGK/AI-dev-assistant/issues"><img src="https://img.shields.io/github/issues/imDarshanGK/AI-dev-assistant" alt="GitHub issues"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/imDarshanGK/AI-dev-assistant" alt="License"></a>
-</p>
+# AI Developer Assistant
 
-QyverixAI is an open-source AI-powered developer assistant that helps beginners understand code, debug errors, and improve programming skills with simple explanations.
+**Debug. Understand. Ship faster.**
 
-Live deployment: https://qyverixai.onrender.com
+An open-source AI-powered developer assistant that helps beginners
+understand code, detect bugs, and improve code quality - with
+plain-English explanations and actionable suggestions.
 
-## Best Free Setup (No Paid Domain)
+<br/>
 
-If you want to run QyverixAI with zero cost:
+[![CI](https://github.com/imDarshanGK/AI-dev-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/imDarshanGK/AI-dev-assistant/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![GSSoC 2026](https://img.shields.io/badge/GSSoC-2026-orange)](https://gssoc.girlscript.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-1. Deploy one Render Web Service only (this repo already serves frontend at `/app/` from the backend service).
-2. Use the free Render URL like `https://your-service.onrender.com`.
-3. Do not buy a domain yet; Render URL is enough.
-4. For persistent user data, use a free PostgreSQL provider (Neon or Supabase free tier).
-5. Keep optional features (Redis, Sentry, LLM) disabled until you are ready.
+<br/>
 
-The current version includes a rule-based assistant engine and an AI-provider abstraction layer, so it works today and is ready for future live LLM integration.
+[**Live Demo**](https://qyverixai.onrender.com) · [**API Docs**](https://qyverixai.onrender.com/docs) · [**Contributing Guide**](CONTRIBUTING.md) · [**Good First Issues**](https://github.com/imDarshanGK/AI-dev-assistant/labels/good%20first%20issue)
 
-## Why This Project
+<br/>
 
-This project is designed for learners and new contributors:
+</div>
 
-- Understand code in simple language
-- Learn debugging patterns using clear issue reports
-- Improve code quality with actionable suggestions
-- Explore a clean architecture that is ready for future LLM integration
+---
+
+## What is QyverixAI?
+
+Many beginners struggle with reading error messages, understanding what their code does, or knowing how to improve it. QyverixAI solves this with a clean workspace where you paste code and instantly get:
+
+- A **plain-English explanation** - what the code does and why
+- A **structured bug report** - what's wrong, which line, and how to fix it
+- **Improvement suggestions** - style tips, best practices, and a quality score
+
+No account required. No API key needed to get started. Fully open source.
+
+---
 
 ## Features
 
-- Code explanation endpoint with language guess and key points
-- Debugging endpoint with rule-based issue detection
-- Improvement endpoint with suggestion cards and next steps
-- Unified full analysis endpoint that returns explanation, debugging, and suggestions in one response
-- Input validation and beginner-friendly error messages
-- Frontend with API URL setting, clear UX states, and formatted output
-- Frontend dark mode toggle, file upload (.py/.js/.java), result copy button, and query history
-- Drag-drop upload, side-by-side editor/output view, language auto-detect UI, and keyboard shortcuts
-- Result download as TXT
-- Dashboard summary cards and saved favorite results stored locally in the browser
-- Backend hardening: rate limiting, request-size limits, request-id headers, and centralized exception responses
-- Optional error tracking (Sentry DSN) and caching (Redis URL with in-memory fallback)
-- Swagger docs available at /docs
+| Feature | Description |
+|---|---|
+|  **Code Explanation** | Language detection, summary, key observations, complexity estimate |
+|  **Bug Detection** | 15+ rule patterns: ZeroDivisionError, bare excepts, hardcoded secrets, eval(), and more |
+|  **Improvement Suggestions** | Pythonic patterns, documentation gaps, dead code, quality score 0–100 |
+|  **Full Analysis Endpoint** | One call — all three analyses combined |
+|  **File Upload** | Drag-drop or upload `.py`, `.js`, `.java`, `.ts`, `.cpp` files |
+|  **Dark / Light Mode** | Persisted theme preference |
+|  **Query History** | Last 50 queries saved locally |
+|  **Saved Favorites** | Bookmark important results |
+|  **Download Results** | Export analysis as `.txt` |
+|  **LLM-Ready** | Drop-in OpenAI-compatible API support via env vars |
+|  **Swagger Docs** | Full interactive API documentation at `/docs` |
 
-## Tech Stack
+---
 
-- Backend: FastAPI, Pydantic
-- Frontend: HTML, CSS, JavaScript
-- Testing: Pytest, FastAPI TestClient
+## Quick Start
 
-## Project Structure
+### 1. Clone
 
-```text
-AI-dev-assistant/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── schemas.py
-│   │   ├── routers/
-│   │   │   ├── analyze.py
-│   │   │   ├── debugging.py
-│   │   │   ├── explanation.py
-│   │   │   └── suggestions.py
-│   │   └── services/
-│   │       ├── ai_provider.py
-│   │       └── code_assistant.py
-│   ├── requirements.txt
-│   └── tests/
-│       ├── test_endpoints.py
-│       └── test_ping.py
-├── frontend/
-│   ├── index.html
-│   ├── script.js
-│   ├── style.css
-│   └── public/
-│       └── favicon.ico
-├── screenshots/
-│   └── demo.png
-├── CONTRIBUTING.md
-├── LICENSE
-└── README.md
+```bash
+git clone https://github.com/imDarshanGK/AI-dev-assistant.git
+cd AI-dev-assistant
 ```
 
-## Setup Instructions
-
-### 1. Start Backend
+### 2. Start the backend
 
 ```bash
 cd backend
@@ -103,59 +80,130 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Backend URLs:
+| Endpoint | URL |
+|---|---|
+| API Root | http://localhost:8000/ |
+| Interactive Docs | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
 
-- API root: http://localhost:8000/
-- Docs: http://localhost:8000/docs
-- Health: http://localhost:8000/health
+### 3. Open the frontend
 
-### 2. Start Frontend
+```bash
+# Open in browser — no build step required
+open frontend/index.html
+```
 
-Open frontend/index.html in your browser and keep backend running.
+Set the API URL in the workspace to `http://localhost:8000` and click **Analyze Code**.
 
-## API Usage
+---
 
-### POST /explanation/
+## API Reference
 
-Request:
+All endpoints accept `POST` with JSON body `{ "code": "..." }`.
+Optional: `{ "code": "...", "language": "python" }` to override language detection.
+
+### `POST /explanation/`
+
+Returns a plain-English breakdown of the code.
 
 ```json
 {
-  "code": "def add(a, b):\n    return a + b"
+  "language": "Python",
+  "summary": "This beginner-level Python snippet defines a reusable function...",
+  "key_points": [
+    "The code is written in Python with 2 lines.",
+    "Defines 1 function: add.",
+    "No loops or conditionals found."
+  ],
+  "complexity": "Beginner"
 }
 ```
 
-### POST /debugging/
+### `POST /debugging/`
 
-Request:
+Returns detected issues with line numbers and fix suggestions.
 
 ```json
 {
-  "code": "def broken(\n  return 1"
+  "issues": [
+    {
+      "type": "Hardcoded Secret",
+      "line": 3,
+      "description": "Hardcoded password found in code.",
+      "suggestion": "Use environment variables: os.getenv('PASSWORD')",
+      "severity": "error"
+    }
+  ],
+  "summary": "Found 1 issue. 1 error(s), 0 warning(s).",
+  "clean": false
 }
 ```
 
-### POST /suggestions/
+### `POST /suggestions/`
 
-Request:
+Returns improvement suggestion cards.
 
 ```json
 {
-  "code": "x=1\nprint(x)"
+  "suggestions": [
+    {
+      "category": "Documentation",
+      "description": "Add docstrings to your functions.",
+      "example": "def greet(name: str) -> str:\n    \"\"\"Return a greeting string.\"\"\"",
+      "priority": "medium"
+    }
+  ],
+  "overall_score": 80,
+  "next_step": "Great code! Consider adding tests next."
 }
 ```
 
-### POST /analyze/
+### `POST /analyze/`
 
-Request:
+All three analyses in one response.
 
 ```json
 {
-  "code": "def add(a, b):\n    return a + b"
+  "provider": "rule-based",
+  "model": "built-in",
+  "explanation": { ... },
+  "debugging": { ... },
+  "suggestions": { ... }
 }
 ```
 
-This endpoint returns provider metadata and all three analysis sections in one response.
+---
+
+## Project Structure
+
+```
+AI-dev-assistant/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app, middleware, routes
+│   │   ├── schemas.py           # Pydantic request/response models
+│   │   ├── routers/
+│   │   │   ├── analyze.py       # POST /analyze/
+│   │   │   ├── debugging.py     # POST /debugging/
+│   │   │   ├── explanation.py   # POST /explanation/
+│   │   │   └── suggestions.py   # POST /suggestions/
+│   │   └── services/
+│   │       ├── code_assistant.py  # Rule-based analysis engine
+│   │       └── ai_provider.py     # LLM abstraction layer
+│   ├── requirements.txt
+│   └── tests/
+│       └── test_endpoints.py    # Full test suite (pytest)
+├── frontend/
+│   ├── index.html               # Main UI — no build step
+│   ├── style.css                # Dark/light theme, responsive
+│   └── script.js                # All interactivity
+├── .env.example                 # Environment variable reference
+├── Dockerfile                   # One-service Docker build
+├── render.yaml                  # Render deploy blueprint
+└── README.md
+```
+
+---
 
 ## Running Tests
 
@@ -164,90 +212,110 @@ cd backend
 pytest -q
 ```
 
-GitHub Actions runs the same test command automatically on every push and pull request to `main`.
+Tests run automatically on every push and pull request via GitHub Actions.
+
+---
 
 ## Deployment
 
-Recommended deployment setup for this project:
+### Render (Recommended - Free Tier)
 
-### Backend on Render
+1. Fork this repository
+2. Connect it to [Render](https://render.com)
+3. Use the `render.yaml` blueprint - one service, zero config
+4. Your app will be live at `https://your-service.onrender.com`
 
-1. Connect this GitHub repository to Render.
-2. Use the `render.yaml` blueprint at the repository root.
-3. Render will build one web service from `backend/Dockerfile`.
-4. The same service serves frontend at `/app/` and API routes from `/`.
-5. The health check endpoint is `/health`.
+The same service serves the frontend at `/app/` and the API from `/`.
 
-### One-Service Mode (Recommended for Free Tier)
+### Docker
 
-Open the service root URL in your browser. It redirects to `/app/`.
-The frontend and backend run on the same Render service.
+```bash
+docker build -t qyverixai .
+docker run -p 8000:8000 qyverixai
+```
 
-### Dashboard Data
+---
 
-Saved favorites and query history currently use browser local storage. This is the foundation for a later database-backed dashboard and user accounts.
+## Optional: Live LLM Integration
 
-### Environment Variables
+QyverixAI works out of the box with its rule-based engine.
+To enable richer AI-powered analysis, set these on your backend host:
 
-If you want to change the provider metadata later, set these variables on the backend host:
+```env
+LLM_ENABLED=true
+LLM_API_KEY=sk-your-key-here
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+```
 
-- `AI_PROVIDER`
-- `AI_MODEL`
-- `CACHE_ENABLED`
-- `CACHE_TTL_SECONDS`
-- `REDIS_URL` (optional)
-- `SENTRY_DSN` (optional)
-- `SENTRY_TRACES_SAMPLE_RATE` (optional)
+Compatible with OpenAI, Groq, Together AI, Ollama, and any OpenAI-compatible endpoint.
 
-### Optional Live LLM Setup (OpenAI-Compatible)
+> ⚠️ Never commit API keys. Use environment variables or your host's secrets manager.
 
-QyverixAI can use a live OpenAI-compatible model for richer summaries while keeping rule-based fallback.
+---
 
-Set these on your backend host:
+## Contributing
 
-- `LLM_ENABLED` (`true` or `false`)
-- `LLM_API_KEY` (secret; never commit)
-- `LLM_BASE_URL` (default: `https://api.openai.com/v1`)
-- `LLM_MODEL` (example: `gpt-4o-mini`)
-- `LLM_TIMEOUT_SECONDS` (default: `30`)
+QyverixAI is a **GSSoC 2026** project - beginner contributors are warmly welcome!
 
-Security note: never store API keys in frontend code, HTML, JavaScript, or git history.
+```bash
+# Fork → Clone → Branch → Code → Test → PR
+git checkout -b feat/your-feature-name
+pytest -q                         # All tests must pass
+```
 
-The current app uses a rule-based engine and provider abstraction so it is ready for future AI integration.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
-## Screenshots
+### Good First Issues
 
-<p align="center">
-  <img src="screenshots/demo.png" alt="Demo Screenshot" width="700"/>
-</p>
+Look for issues labeled [`good first issue`](https://github.com/imDarshanGK/AI-dev-assistant/labels/good%20first%20issue):
+
+- Add support for a new language pattern in the debug engine
+- Improve explanation key points for a specific language
+- Add a new suggestion rule
+- Write tests for edge cases
+- Improve frontend accessibility
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI, Pydantic v2, Python 3.12 |
+| Frontend | HTML5, CSS3, Vanilla JS (no build step) |
+| Testing | Pytest, FastAPI TestClient |
+| Deploy | Docker, Render |
+| CI | GitHub Actions |
+
+---
 
 ## Roadmap
 
-- Add language-specific analyzers (Python, JS, Java)
-- Add optional LLM provider adapter layer
-- Add CI workflow for lint and test checks
-- Add Docker setup for one-command run
-- Add richer frontend result cards
+- [x] Rule-based code explanation engine
+- [x] Bug detection with 15+ patterns
+- [x] Improvement suggestions with quality score
+- [x] Full-analysis combined endpoint
+- [x] Dark/light theme, file upload, history, favorites
+- [x] LLM provider abstraction layer
+- [ ] Language-specific analyzers (Python, JS, Java, Go)
+- [ ] Per-user history with database backend
+- [ ] VS Code extension
+- [ ] AI-powered explanations (LLM integration GA)
+- [ ] Multi-file analysis support
 
-## How To Contribute
+---
 
-See CONTRIBUTING.md for full contribution workflow.
+## License
 
-1. Fork repository
-2. Create a feature branch
-3. Make and test changes
-4. Open a pull request
+MIT © [Darshan G K](https://github.com/imDarshanGK)
 
-## Beginner-Friendly Issues
+Built with ♥ for the open source community · GSSoC 2026
 
-Start with issues labeled good first issue:
+---
 
-https://github.com/imDarshanGK/AI-dev-assistant/labels/good%20first%20issue
+<div align="center">
 
-## Open Source Support Files
+[⭐ Star this repo](https://github.com/imDarshanGK/AI-dev-assistant) · [🐛 Report a bug](https://github.com/imDarshanGK/AI-dev-assistant/issues/new?template=bug_report.md) · [💡 Request a feature](https://github.com/imDarshanGK/AI-dev-assistant/issues/new?template=feature_request.md)
 
-- .github/ISSUE_TEMPLATE/bug_report.md
-- .github/ISSUE_TEMPLATE/feature_request.md
-- .github/pull_request_template.md
-- CODE_OF_CONDUCT.md
-
+</div>

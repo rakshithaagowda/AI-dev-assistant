@@ -1,354 +1,184 @@
-import ast
-import re
+"""
+QyverixAI Code Assistant Service
+Rule-based engine with optional LLM integration.
+"""
 
+import re
+import os
+import logging
+from typing import Optional
 from app.schemas import (
-    DebugIssue,
-    DebugResponse,
-    ExplanationResponse,
-    ImprovementSuggestion,
-    SuggestionsResponse,
+    ExplanationResponse, DebuggingResponse, DebugIssue,
+    SuggestionsResponse, SuggestionCard
 )
 
+logger = logging.getLogger("qyverix.assistant")
+
+# ── Language Detection ──
+LANG_PATTERNS = {
+    "Python":     [r"\bdef \w+\(", r"\bimport \w+", r"\bprint\(", r"if __name__"],
+    "JavaScript": [r"\bconst \b", r"\blet \b", r"\bvar \b", r"=>\s*{", r"console\.log"],
+    "TypeScript": [r":\s*(string|number|boolean|any)\b", r"\binterface \w+", r"\btype \w+\s*="],
+    "Java":       [r"public class", r"System\.out\.println", r"\bvoid \w+\("],
+    "C++":        [r"#include\s*<", r"\bstd::", r"\bcout\b"],
+    "C":          [r"#include\s*<stdio\.h>", r"\bprintf\(", r"\bscanf\("],
+    "Go":         [r"\bfunc \w+\(", r"\bpackage \w+", r"\bfmt\.Println"],
+    "Rust":       [r"\bfn \w+\(", r"\blet mut\b", r"\bprintln!"],
+    "Ruby":       [r"\bdef \w+", r"\bend\b", r"\bputs\b"],
+    "PHP":        [r"<\?php", r"\$\w+\s*=", r"echo\s+"],
+    "SQL":        [r"\bSELECT\b", r"\bFROM\b", r"\bWHERE\b"],
+    "HTML":       [r"<!DOCTYPE html>", r"<html", r"<div\b"],
+    "CSS":        [r"\{[\s\S]*?:\s*[\s\S]*?;", r"\.\w+\s*\{", r"#\w+\s*\{"],
+    "Bash":       [r"#!/bin/bash", r"\becho\b", r"\$\("],
+}
 
 def detect_language(code: str) -> str:
-    normalized = code.strip().lower()
+    scores = {}
+    for lang, patterns in LANG_PATTERNS.items():
+        scores[lang] = sum(1 for p in patterns if re.search(p, code))
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "Unknown"
 
-    if (
-        "def " in normalized
-        or "import " in normalized
-        or "print(" in normalized
-        or "input(" in normalized
-        or "elif " in normalized
-    ):
-        return "Python"
-    if "function " in normalized or "console.log(" in normalized:
-        return "JavaScript"
-    if "<html" in normalized or "<div" in normalized:
-        return "HTML"
-    if "class " in normalized and "public static void main" in normalized:
-        return "Java"
+# ── Complexity ──
+def estimate_complexity(code: str) -> str:
+    lines = len(code.strip().splitlines())
+    func_count = len(re.findall(r"\bdef |\bfunction |\bfunc \b", code))
+    if lines < 15 and func_count <= 1:
+        return "Beginner"
+    elif lines < 60 and func_count <= 4:
+        return "Intermediate"
+    return "Advanced"
 
-    return "Unknown"
+# ── Explanation Service ──
+def explain_code(code: str, language: Optional[str] = None) -> ExplanationResponse:
+    lang = language or detect_language(code)
+    lines = code.strip().splitlines()
+    line_count = len(lines)
+    complexity = estimate_complexity(code)
 
+    # Build key points
+    points = [f"The code is written in {lang} with {line_count} line{'s' if line_count != 1 else ''}."]
 
-def explain_code(code: str) -> ExplanationResponse:
-    language = detect_language(code)
-    lines = [line for line in code.splitlines() if line.strip()]
-    normalized = code.lower()
+    func_names = re.findall(r"def (\w+)\(|function (\w+)\(|func (\w+)\(", code)
+    if func_names:
+        names = [next(n for n in g if n) for g in func_names]
+        points.append(f"Defines {len(names)} function(s): {', '.join(names)}.")
 
-    has_function = any("def " in line or "function " in line for line in lines)
-    has_loop = any("for " in line or "while " in line for line in lines)
-    has_condition = any("if " in line for line in lines)
-    has_input = "input(" in normalized
-    has_print = "print(" in normalized
-    has_reverse_slice = "[::-1]" in normalized
+    if re.search(r"\bfor\b|\bwhile\b", code):
+        points.append("Uses loop(s) to iterate over data or repeat operations.")
+    if re.search(r"\bif\b|\belif\b|\belse\b", code):
+        points.append("Contains conditional logic (if/else) for decision-making.")
+    if re.search(r"\bclass\b", code):
+        class_names = re.findall(r"class (\w+)", code)
+        points.append(f"Defines class(es): {', '.join(class_names)}.")
+    if re.search(r"\bimport\b|\brequire\b|\buse\b", code):
+        points.append("Imports or uses external modules/libraries.")
+    if re.search(r"\btry\b|\bcatch\b|\bexcept\b", code):
+        points.append("Includes error handling (try/except/catch blocks).")
+    if re.search(r"#.*|//.*|/\*[\s\S]*?\*/", code):
+        points.append("Contains comments explaining the code logic.")
 
-    key_points = [
-        f"This snippet has about {len(lines)} non-empty lines.",
-        f"The detected language is likely {language}.",
-    ]
-
-    if has_function:
-        key_points.append("It defines at least one function to organize logic.")
-    if has_loop:
-        key_points.append("It uses a loop, so some steps repeat automatically.")
-    if has_condition:
-        key_points.append("It uses conditions to make decisions in code.")
-
-    if len(key_points) == 2:
-        key_points.append("It appears to be a straightforward code snippet with basic flow.")
-
-    if has_reverse_slice and has_condition:
-        summary = (
-            "This code checks whether text is a palindrome by normalizing the input and "
-            "comparing it with its reversed version."
-        )
-    elif has_input and has_print:
-        summary = (
-            "This code asks the user for input values and prints a friendly output message "
-            "based on those values."
-        )
-    elif has_function and has_loop:
-        summary = (
-            "This code defines reusable logic in a function and uses repeated steps with a loop "
-            "to produce results."
-        )
-    elif has_function:
-        summary = (
-            "This code defines at least one function and then uses that function to process values "
-            "and produce output."
-        )
-    else:
-        summary = (
-            "This code executes statements in sequence and demonstrates basic program flow in a "
-            "beginner-friendly structure."
-        )
-
-    return ExplanationResponse(
-        language_guess=language,
-        summary=summary,
-        key_points=key_points,
-        beginner_tip="Read code from top to bottom, then test one small part at a time.",
+    summary = (
+        f"This {complexity.lower()}-level {lang} snippet has {line_count} lines. "
+        f"It {'defines reusable functions' if func_names else 'runs procedural code'} "
+        f"and {'includes control flow logic' if re.search(r'if|for|while', code) else 'performs direct operations'}."
     )
 
+    return ExplanationResponse(language=lang, summary=summary, key_points=points, complexity=complexity)
 
-def debug_code(code: str) -> DebugResponse:
-    language = detect_language(code)
+# ── Debugging Rules ──
+DEBUG_RULES = [
+    # Python
+    {"pattern": r"\/\s*0\b|\/0\b",            "lang": None, "type": "ZeroDivisionError",    "severity": "error",   "desc": "Possible division by zero detected.",            "fix": "Check if the denominator is zero before dividing."},
+    {"pattern": r"\bprint\s+['\"]",            "lang": "Python", "type": "Syntax (Python 2)","severity": "warning", "desc": "Looks like Python 2 print statement.",           "fix": "Use print() function: print('...')"},
+    {"pattern": r"==\s*None\b",                "lang": "Python", "type": "Style Warning",    "severity": "warning", "desc": "Comparison to None using '==' instead of 'is'.", "fix": "Use `is None` instead of `== None`."},
+    {"pattern": r"\bexcept:\s*$",              "lang": None, "type": "Bare Except",          "severity": "warning", "desc": "Bare except clause catches all exceptions.",      "fix": "Specify the exception type: except ValueError:"},
+    {"pattern": r"[a-z]\s*=\s*[a-z]\s*=",     "lang": None, "type": "Chained Assignment",   "severity": "info",    "desc": "Chained assignment detected.",                   "fix": "Ensure this is intentional and variables are correctly set."},
+    # JS / TS
+    {"pattern": r"===\s*null\s*\|\|\s*===\s*undefined", "lang": None, "type": "Nullish Check", "severity": "info", "desc": "Verbose nullish check.",                        "fix": "Consider using ?? (nullish coalescing) operator."},
+    {"pattern": r"\bvar\b",                    "lang": "JavaScript", "type": "Style Warning", "severity": "info",  "desc": "'var' is function-scoped and can cause bugs.",    "fix": "Use 'const' or 'let' instead."},
+    {"pattern": r"eval\(",                     "lang": None, "type": "Security Risk",        "severity": "error",  "desc": "eval() can execute arbitrary code.",              "fix": "Avoid eval(). Use safer alternatives."},
+    # General
+    {"pattern": r"TODO|FIXME|HACK|XXX",        "lang": None, "type": "Incomplete Code",      "severity": "info",   "desc": "TODO/FIXME comment found — unfinished logic.",    "fix": "Address the TODO before shipping to production."},
+    {"pattern": r"password\s*=\s*['\"].+['\"]","lang": None, "type": "Hardcoded Secret",    "severity": "error",  "desc": "Hardcoded password or secret found in code.",     "fix": "Use environment variables: os.getenv('PASSWORD')"},
+    {"pattern": r"http://",                    "lang": None, "type": "Insecure URL",         "severity": "warning", "desc": "HTTP (not HTTPS) URL detected.",                 "fix": "Use HTTPS URLs for secure communication."},
+    {"pattern": r"\bsleep\(\d+\)",             "lang": None, "type": "Blocking Call",        "severity": "info",   "desc": "Synchronous sleep() blocks execution.",           "fix": "Consider async alternatives if this is in a loop or server."},
+    {"pattern": r"catch\s*\(\w+\)\s*\{\s*\}", "lang": None, "type": "Empty Catch",          "severity": "warning", "desc": "Empty catch block swallows errors silently.",     "fix": "Log or handle the exception inside the catch block."},
+]
+
+def debug_code(code: str, language: Optional[str] = None) -> DebuggingResponse:
+    lang = language or detect_language(code)
     issues: list[DebugIssue] = []
+    lines_list = code.splitlines()
 
-    if language == "Python":
-        try:
-            ast.parse(code)
-        except SyntaxError as exc:
-            issues.append(
-                DebugIssue(
-                    line=exc.lineno,
-                    issue_type="SyntaxError",
-                    message=str(exc.msg),
-                    why_it_happens="Python found code that does not match language syntax rules.",
-                    fix_suggestion="Check missing colons, brackets, quotes, or indentation around this line.",
-                )
-            )
-
-    lines = code.splitlines()
-
-    if "\t" in code and re.search(r"^ +", code, flags=re.MULTILINE):
-        issues.append(
-            DebugIssue(
-                line=None,
-                issue_type="Indentation",
-                message="Mixed tabs and spaces detected.",
-                why_it_happens="Using tabs and spaces together can break indentation-sensitive code.",
-                fix_suggestion="Use only spaces (recommended: 4) or only tabs consistently.",
-            )
-        )
-
-    for i, line in enumerate(lines, start=1):
-        if len(line) > 100:
-            issues.append(
-                DebugIssue(
+    for rule in DEBUG_RULES:
+        if rule["lang"] and rule["lang"].lower() not in lang.lower():
+            continue
+        for i, line in enumerate(lines_list, 1):
+            if re.search(rule["pattern"], line, re.IGNORECASE):
+                issues.append(DebugIssue(
+                    type=rule["type"],
                     line=i,
-                    issue_type="Readability",
-                    message="Very long line detected.",
-                    why_it_happens="Long lines are harder to read and debug.",
-                    fix_suggestion="Break long logic into multiple lines or helper variables.",
-                )
-            )
-            break
+                    description=rule["desc"],
+                    suggestion=rule["fix"],
+                    severity=rule["severity"]
+                ))
 
-    if re.search(r"except\s*:", code):
-        issues.append(
-            DebugIssue(
-                line=None,
-                issue_type="Error handling",
-                message="Bare except detected.",
-                why_it_happens="Bare except hides real errors and makes debugging harder.",
-                fix_suggestion="Catch specific exceptions, such as ValueError or TypeError.",
-            )
-        )
+    clean = len(issues) == 0
+    summary = (
+        "✓ No issues detected. Code looks clean!" if clean
+        else f"Found {len(issues)} issue(s). {len([i for i in issues if i.severity == 'error'])} error(s), "
+             f"{len([i for i in issues if i.severity == 'warning'])} warning(s)."
+    )
+    return DebuggingResponse(issues=issues, summary=summary, clean=clean)
 
-    if not issues:
-        issues.append(
-            DebugIssue(
-                line=None,
-                issue_type="No major issue found",
-                message="No clear problems detected by rule-based checks.",
-                why_it_happens="The current checks did not detect syntax or common beginner mistakes.",
-                fix_suggestion="Run tests and add logging to verify behavior in real scenarios.",
-            )
-        )
+# ── Suggestions ──
+SUGGESTION_RULES = [
+    {"pattern": r"(?<!\w)(\w+)\s*=\s*\1\b",    "cat": "Redundant Assignment", "desc": "Self-assignment detected. Remove the line.",                               "example": "# x = x  ← remove this",            "priority": "high"},
+    {"pattern": r"#[^\n]{0,5}$",               "cat": "Comment Quality",      "desc": "Short comment found. Add more context to explain the 'why'.",              "example": "# increments counter by 1 each loop", "priority": "low"},
+    {"pattern": r"print\(|console\.log\(",     "cat": "Debug Statement",      "desc": "Debug print/log found. Remove before production.",                         "example": "# Remove or use a proper logger",     "priority": "medium"},
+    {"pattern": r"^(\s{2}|\t)[^\s]",           "cat": "Indentation",          "desc": "Inconsistent or 2-space indentation. Python PEP8 recommends 4 spaces.",   "example": "Use 4 spaces consistently",           "priority": "low"},
+    {"pattern": r"range\(len\(",               "cat": "Pythonic Code",        "desc": "range(len()) is not Pythonic.",                                            "example": "for item in my_list:",                "priority": "medium"},
+    {"pattern": r"\[\]$|\{\}$",               "cat": "Empty Collection",     "desc": "Initializing empty collection. Consider if this is intentional.",          "example": "items: list[str] = []",               "priority": "info"},
+    {"pattern": r"def \w+\([^)]{60,}\)",      "cat": "Function Signature",   "desc": "Function has many parameters. Consider using a dataclass or dict.",        "example": "def process(config: Config):",         "priority": "medium"},
+    {"pattern": r"if True:|if False:",         "cat": "Dead Code",            "desc": "'if True/False' is dead code. Remove or replace with the real condition.", "example": "if is_enabled:",                      "priority": "high"},
+    {"pattern": r"(\w+)\s*==\s*True\b",       "cat": "Bool Comparison",      "desc": "Comparing to True/False explicitly. Just use the variable.",               "example": "if is_valid: instead of == True",     "priority": "low"},
+    {"pattern": r"global \w+",                "cat": "Global Variable",      "desc": "Avoid global variables — they make code harder to test and debug.",         "example": "Pass as function argument instead",   "priority": "medium"},
+    {"pattern": r"lambda.*lambda",             "cat": "Lambda Complexity",    "desc": "Nested lambdas reduce readability.",                                        "example": "Use a named function instead",        "priority": "medium"},
+    {"pattern": r"string\.join|\.join\(",     "cat": "String Building",      "desc": "Good use of .join() for string concatenation — efficient!",                 "example": "', '.join(items)",                    "priority": "info"},
+]
 
-    return DebugResponse(
-        language_guess=language,
-        issues=issues,
-        quick_checks=[
-            "Run the code with a small sample input.",
-            "Read the first error message carefully.",
-            "Print intermediate values to locate unexpected behavior.",
-        ],
+def suggest_improvements(code: str, language: Optional[str] = None) -> SuggestionsResponse:
+    cards: list[SuggestionCard] = []
+    seen_cats = set()
+    lines_list = code.splitlines()
+
+    for rule in SUGGESTION_RULES:
+        for line in lines_list:
+            if re.search(rule["pattern"], line) and rule["cat"] not in seen_cats:
+                cards.append(SuggestionCard(
+                    category=rule["cat"],
+                    description=rule["desc"],
+                    example=rule.get("example"),
+                    priority=rule["priority"]
+                ))
+                seen_cats.add(rule["cat"])
+                break
+
+    # Always add docstring tip if no docstring present
+    if not re.search(r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'', code):
+        cards.append(SuggestionCard(
+            category="Documentation",
+            description="Add docstrings to your functions to describe their purpose, parameters, and return value.",
+            example='def greet(name: str) -> str:\n    """Return a greeting string."""',
+            priority="medium"
+        ))
+
+    # Score: start at 100, deduct per issue
+    score = max(0, 100 - len(cards) * 10)
+    next_step = (
+        "Great code! Consider adding tests next." if score >= 80
+        else "Focus on fixing high-priority issues first, then add tests."
     )
 
-
-def suggest_improvements(code: str) -> SuggestionsResponse:
-    language = detect_language(code)
-    suggestions: list[ImprovementSuggestion] = []
-
-    if "x=" in code or "y=" in code:
-        suggestions.append(
-            ImprovementSuggestion(
-                title="Use descriptive variable names",
-                reason="Meaningful names make code easier for others to understand.",
-                before="x=1",
-                after="item_count = 1",
-            )
-        )
-
-    if "print(" in code and "logging" not in code:
-        suggestions.append(
-            ImprovementSuggestion(
-                title="Use logging for larger projects",
-                reason="Logging levels help debug without editing many print statements.",
-                before='print("Value:", value)',
-                after='import logging\nlogging.info("Value: %s", value)',
-            )
-        )
-
-    if "def " in code and "\"\"\"" not in code:
-        suggestions.append(
-            ImprovementSuggestion(
-                title="Add docstrings",
-                reason="Docstrings explain what a function does for beginners and contributors.",
-                before="def calculate_total(items):",
-                after='def calculate_total(items):\n    \"\"\"Return total price for all items.\"\"\"',
-            )
-        )
-
-    if not suggestions:
-        suggestions.append(
-            ImprovementSuggestion(
-                title="Split code into smaller functions",
-                reason="Smaller functions are easier to test and debug.",
-                before="One long function handling everything",
-                after="Multiple small functions with one responsibility each",
-            )
-        )
-
-    return SuggestionsResponse(
-        language_guess=language,
-        suggestions=suggestions,
-        next_steps=[
-            "Pick one suggestion and implement it first.",
-            "Run the code again after each change.",
-            "Write a short test to confirm the behavior did not break.",
-        ],
-    )
-
-
-def chat_fallback_reply(message: str, code: str | None, history: list[str], level: str) -> str:
-    normalized_message = message.strip().lower()
-    snippet = (code or "").strip()
-    message_code_hint = message if any(token in normalized_message for token in ["print(", "def ", "input(", "return "]) else ""
-    analysis_source = snippet or message_code_hint
-    explanation = explain_code(analysis_source) if analysis_source else None
-    debugging = debug_code(analysis_source) if analysis_source else None
-    suggestions = suggest_improvements(analysis_source) if analysis_source else None
-
-    wants_explanation = any(
-        phrase in normalized_message
-        for phrase in ["explain", "understand", "what does", "what is this", "why does", "how does"]
-    )
-    wants_debugging = any(
-        phrase in normalized_message
-        for phrase in ["debug", "fix", "error", "not work", "broken", "bug"]
-    )
-    wants_addition_example = any(
-        phrase in normalized_message
-        for phrase in ["add two", "add two number", "sum two", "addition", "two numbers"]
-    )
-    wants_addition_example = wants_addition_example or bool(re.search(r"\badd\s+\d+\s+number", normalized_message))
-
-    wants_simple_code = any(
-        phrase in normalized_message
-        for phrase in ["simple code", "example code", "give me code", "hello give me", "sample code"]
-    )
-
-    wants_greeting = any(
-        normalized_message.startswith(phrase)
-        for phrase in ["hi", "hello", "hey"]
-    )
-    wants_table = any(
-        phrase in normalized_message
-        for phrase in ["table", "times table", "multiplication table", "number table"]
-    )
-
-    number_match = re.search(r"\b(\d{1,3})\b", normalized_message)
-    table_number = int(number_match.group(1)) if number_match else 5
-
-    if wants_table:
-        rows = [f"{table_number} x {i} = {table_number * i}" for i in range(1, 11)]
-        return (
-            f"Here is the {table_number} multiplication table:\n\n"
-            + "\n".join(rows)
-            + "\n\n"
-            + "If you want, I can also give a Python loop version to generate any table."
-        )
-
-    if wants_addition_example:
-        return (
-            "In Python, add two numbers like this:\n\n"
-            "```python\n"
-            "a = 5\n"
-            "b = 3\n"
-            "result = a + b\n"
-            "print(result)\n"
-            "```\n\n"
-            "This prints 8. If you want, I can also show the same thing in JavaScript or Java."
-        )
-
-    if wants_simple_code:
-        return (
-            "Here is a simple Python example:\n\n"
-            "```python\n"
-            "name = input(\"Enter your name: \")\n"
-            "print(\"Hello,\", name)\n"
-            "```\n\n"
-            "If you want, I can give a simple calculator example next."
-        )
-
-    if wants_greeting and not analysis_source:
-        return (
-            "Hello. I can help with Python, JavaScript, and Java questions. "
-            "Ask for a code example, table, explanation, or bug fix."
-        )
-
-    if wants_explanation and explanation:
-        key_points = "\n".join(f"- {item}" for item in explanation.key_points)
-        return (
-            f"{explanation.summary}\n\n"
-            f"Key points:\n{key_points}\n\n"
-            f"Beginner tip: {explanation.beginner_tip}"
-        )
-
-    if wants_debugging and debugging:
-        issues_text = []
-        for issue in debugging.issues[:3]:
-            issues_text.append(
-                f"- {issue.issue_type}: {issue.message}"
-                + (f" (line {issue.line})" if issue.line else "")
-                + f"\n  Why: {issue.why_it_happens}\n  Fix: {issue.fix_suggestion}"
-            )
-
-        quick_checks = "\n".join(f"- {item}" for item in debugging.quick_checks)
-        return (
-            "Here is the quickest rule-based debug readout:\n\n"
-            + ("\n".join(issues_text) if issues_text else "- No major issues were detected.\n")
-            + f"\nQuick checks:\n{quick_checks}"
-        )
-
-    if analysis_source and suggestions:
-        suggestions_text = []
-        for suggestion in suggestions.suggestions[:3]:
-            suggestions_text.append(f"- {suggestion.title}: {suggestion.reason}")
-
-        next_steps = "\n".join(f"- {item}" for item in suggestions.next_steps)
-        return (
-            "I can help with this code using the built-in assistant.\n\n"
-            f"Suggested improvements:\n" + "\n".join(suggestions_text) + f"\n\nNext steps:\n{next_steps}"
-        )
-
-    if analysis_source:
-        return (
-            f"I read your code at {level} level and can explain, debug, or improve it. "
-            "Try asking: 'Explain this code', 'Find bugs', or 'Improve this code'."
-        )
-
-    if history:
-        return (
-            "I can answer directly. Try asking one clear request, for example: "
-            "'Give 5 table', 'Write simple add-two-numbers code in Python', or 'Explain this function'."
-        )
-
-    return (
-        "I can help explain code, find bugs, or suggest improvements. "
-        "Paste code into the editor and ask a question like 'What does this do?'"
-    )
+    return SuggestionsResponse(suggestions=cards, overall_score=score, next_step=next_step)
