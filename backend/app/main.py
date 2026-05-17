@@ -6,7 +6,7 @@ FastAPI application with advanced middleware, rate limiting, and full analysis e
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import time
 import os
@@ -52,7 +52,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middleware ─────────────────────────────────────────────────────────────────
+# ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
@@ -79,14 +79,14 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 
-# ── Routers ────────────────────────────────────────────────────────────────────
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(explanation.router, prefix="/explanation", tags=["Explanation"])
 app.include_router(debugging.router,   prefix="/debugging",   tags=["Debugging"])
 app.include_router(suggestions.router, prefix="/suggestions", tags=["Suggestions"])
 app.include_router(analyze.router,     prefix="/analyze",     tags=["Full Analysis"])
 
 
-# ── Core Endpoints ─────────────────────────────────────────────────────────────
+# ── Core Endpoints ────────────────────────────────────────────────────────────
 @app.get("/", response_model=HealthResponse, tags=["System"])
 async def root():
     return {
@@ -98,17 +98,27 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health():
-    return {"status": "ok", "version": "3.0.0", "message": "Healthy"}
+async def health_check():
+    return {
+        "status": "ok",
+        "version": "3.0.0",
+        "message": "QyverixAI is healthy",
+        "endpoints": ["/explanation/", "/debugging/", "/suggestions/", "/analyze/"],
+    }
 
 
-# ── Static / Frontend ──────────────────────────────────────────────────────────
+@app.get("/ping", tags=["System"])
+async def ping():
+    return {"message": "pong"}
+
+
+# ── Static / Frontend ─────────────────────────────────────────────────────────
 _frontend = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
 if os.path.isdir(_frontend):
     app.mount("/app", StaticFiles(directory=_frontend, html=True), name="frontend")
 
 
-# ── Global error handler ───────────────────────────────────────────────────────
+# ── Global error handler ──────────────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(

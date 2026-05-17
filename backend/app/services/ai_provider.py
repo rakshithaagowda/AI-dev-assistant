@@ -6,7 +6,6 @@ Compatible with OpenAI, Groq, Together AI, Ollama.
 
 from __future__ import annotations
 import os
-import json
 import httpx
 
 LLM_ENABLED  = os.getenv("LLM_ENABLED", "false").lower() == "true"
